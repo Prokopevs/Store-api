@@ -21,21 +21,48 @@ const getAllProductsStatic = async (req, res) => {
 };
 
 const getAllProducts = async (req, res) => {
-    const { product_featured, product_company_name, product_name, product_price, fields, numericFilters } = req.query;
+    const { product_featured, product_company_name, product_name, product_price, sort, page, numericFilters } = req.query;
     let sqlQuery = "SELECT * FROM products WHERE "  
     let sqlReq = [] 
-    let mergeString = [] 
+    let mergeStringArr = [] 
+    let sortString = ""
+    const limit = 3
+    let paginationString = ""
  
     const SqlEqual = (queryKey, queryValue) => { 
         sqlReq = [...sqlReq, queryValue] 
-        mergeString = [...mergeString, `${queryKey} = $${sqlReq.length}`] 
+        mergeStringArr = [...mergeStringArr, `${queryKey} = $${sqlReq.length}`] 
     }   
      
     const SqlBetween = (queryKey, queryValue) => { 
         const priceArr = queryValue.split("-") 
         sqlReq = [...sqlReq, ...priceArr] 
-        mergeString = [...mergeString, `${queryKey} BETWEEN $${sqlReq.length - 1} AND $${sqlReq.length}`] 
+        mergeStringArr = [...mergeStringArr, `${queryKey} BETWEEN $${sqlReq.length - 1} AND $${sqlReq.length}`] 
     }   
+
+    const SqlLike = (queryKey, queryValue) => { 
+        mergeStringArr = [...mergeStringArr, `${queryKey} LIKE '%${queryValue}%'`] 
+    }  
+
+    const SqlNumericFilters = (numericFilters) => { 
+        const filtersArr = numericFilters.split(",")  
+        mergeStringArr = [...mergeStringArr, ...filtersArr] 
+    } 
+
+    const SqlOrderBy = (sort) => { 
+        const orderType = sort[0] === "-" ? "DESC" : "ASC"
+        if(orderType === "DESC") {
+            sort = sort.slice(1)
+        }
+        sortString = ` ORDER BY ${sort} ${orderType}`
+    } 
+
+    const SqlPagination = (page) => {
+        page = Number(page) || 1
+        paginationString =` LIMIT ${limit} OFFSET ${limit*(page-1)}`
+    } 
+
+    
      
     if (product_featured) { 
         SqlEqual("product_featured", product_featured) 
@@ -44,81 +71,36 @@ const getAllProducts = async (req, res) => {
         SqlEqual("product_company_name", product_company_name) 
     } 
     if (product_name) { 
-        SqlEqual("product_name", product_name) 
+        SqlLike("product_name", product_name) 
     } 
+    if (numericFilters) {
+        SqlNumericFilters(numericFilters)
+    }
     if (product_price) { 
         SqlBetween("product_price", product_price) 
     } 
+    if (sort) { 
+        SqlOrderBy(sort) 
+    } 
+    SqlPagination(page) 
+
  
-    if(mergeString.length === 0) { 
+    if(mergeStringArr.length === 0) { 
         sqlQuery = "SELECT * FROM products"
     } else { 
-        sqlQuery = sqlQuery + mergeString.join(" AND ") 
+        sqlQuery = sqlQuery + mergeStringArr.join(" AND ") 
     } 
 
+    if(sort) {
+        sqlQuery = sqlQuery + sortString
+    }
+
+    sqlQuery = sqlQuery + paginationString
+    console.log(sqlQuery)
+     
     const products = await db.query(sqlQuery, sqlReq)
     res.status(200).json({ data: products.rows, nbHits: products.rows.length });
 };
-
-// const getAllProducts = async (req, res) => {
-//   const { featured, company, name, sort, fields, numericFilters } = req.query;
-//   const queryObject = {};
-
-//   if (featured) {
-//     queryObject.featured = featured === 'true' ? true : false;
-//   }
-//   if (company) {
-//     queryObject.company = company;
-//   }
-//   if (name) {
-//     queryObject.name = { $regex: name, $options: 'i' };
-//   }
-//   if (numericFilters) {
-//     const operatorMap = {
-//       '>': '$gt',
-//       '>=': '$gte',
-//       '=': '$eq',
-//       '<': '$lt',
-//       '<=': '$lte',
-//     };
-//     const regEx = /\b(<|>|>=|=|<|<=)\b/g;
-//     let filters = numericFilters.replace(
-//       regEx,
-//       (match) => `-${operatorMap[match]}-`
-//     );
-//     const options = ['price', 'rating'];
-//     filters = filters.split(',').forEach((item) => {
-//       const [field, operator, value] = item.split('-');
-//       if (options.includes(field)) {
-//         queryObject[field] = { [operator]: Number(value) };
-//       }
-//     });
-//   }
-
-//   let result = Product.find(queryObject);
-//   // sort
-//   if (sort) {
-//     const sortList = sort.split(',').join(' ');
-//     result = result.sort(sortList);
-//   } else {
-//     result = result.sort('createdAt');
-//   }
-
-//   if (fields) {
-//     const fieldsList = fields.split(',').join(' ');
-//     result = result.select(fieldsList);
-//   }
-//   const page = Number(req.query.page) || 1;
-//   const limit = Number(req.query.limit) || 10;
-//   const skip = (page - 1) * limit;
-
-//   result = result.skip(skip).limit(limit);
-//   // 23
-//   // 4 7 7 7 2
-
-//   const products = await result;
-//   res.status(200).json({ products, nbHits: products.length });
-// };
 
 module.exports = {
   getAllProducts,
