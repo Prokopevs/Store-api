@@ -21,37 +21,42 @@ const getAllProductsStatic = async (req, res) => {
 };
 
 const getAllProducts = async (req, res) => {
-    const { product_featured, product_company_name, product_name, sort, fields, numericFilters } = req.query;
-    let sqlQuery = `SELECT * FROM products`
+    const { product_featured, product_company_name, product_name, product_price, fields, numericFilters } = req.query;
+    let sqlQuery = "SELECT * FROM products WHERE "  
+    let sqlReq = [] 
+    let mergeString = [] 
+ 
+    const SqlEqual = (queryKey, queryValue) => { 
+        sqlReq = [...sqlReq, queryValue] 
+        mergeString = [...mergeString, `${queryKey} = $${sqlReq.length}`] 
+    }   
+     
+    const SqlBetween = (queryKey, queryValue) => { 
+        const priceArr = queryValue.split("-") 
+        sqlReq = [...sqlReq, ...priceArr] 
+        mergeString = [...mergeString, `${queryKey} BETWEEN $${sqlReq.length - 1} AND $${sqlReq.length}`] 
+    }   
+     
+    if (product_featured) { 
+        SqlEqual("product_featured", product_featured) 
+    } 
+    if (product_company_name) { 
+        SqlEqual("product_company_name", product_company_name) 
+    } 
+    if (product_name) { 
+        SqlEqual("product_name", product_name) 
+    } 
+    if (product_price) { 
+        SqlBetween("product_price", product_price) 
+    } 
+ 
+    if(mergeString.length === 0) { 
+        sqlQuery = "SELECT * FROM products"
+    } else { 
+        sqlQuery = sqlQuery + mergeString.join(" AND ") 
+    } 
 
-    const createSQLString = (queryKey, queryValue, queryType) => {
-        const checkQueryType = (queryValue, queryType) => {
-            return queryType === "string" ? `'${queryValue}'`: `${queryValue}`
-        }
-
-        if (/WHERE/.test(sqlQuery)) {
-            sqlQuery = sqlQuery + ` AND ${queryKey} = ${checkQueryType(queryValue, queryType)}`
-        } else {
-            sqlQuery = sqlQuery + ` WHERE ${queryKey} = ${checkQueryType(queryValue, queryType)}`
-        }
-    }  
-    
-
-    if (product_featured) {
-        createSQLString("product_featured", product_featured)
-        console.log(sqlQuery)
-    }
-    if (product_company_name) {
-        createSQLString("product_company_name", product_company_name, "string")
-        console.log(sqlQuery)
-    }
-    if (product_name) {
-        createSQLString("product_name", product_name, "string")
-        console.log(sqlQuery)
-    }
-
-
-    const products = await db.query(sqlQuery)
+    const products = await db.query(sqlQuery, sqlReq)
     res.status(200).json({ data: products.rows, nbHits: products.rows.length });
 };
 
